@@ -56,6 +56,8 @@ bool initialized = false;
 
 std::ofstream f_time, opt_time;
 
+static const int _N = (1 << POW); // 2 to the power of POW
+static const int _N_2 = _N / 2;
 
 ewok::PolynomialTrajectory3D<10>::Ptr traj;
 ewok::EuclideanDistanceRingBuffer<POW>::Ptr edrb;
@@ -68,6 +70,8 @@ tf::TransformListener * listener;
 void depthImageCallback(const sensor_msgs::Image::ConstPtr& msg)
 {
     //ROS_INFO("recieved depth image");
+    ros::WallTime startTime = ros::WallTime::now();
+
 
     cv_bridge::CvImageConstPtr cv_ptr;
     try
@@ -140,9 +144,9 @@ void depthImageCallback(const sensor_msgs::Image::ConstPtr& msg)
         Eigen::Vector3i idx;
         edrb->getIdx(origin, idx);
 
-        ROS_INFO_STREAM("Origin: " << origin.transpose() << " idx " << idx.transpose());
-
-        edrb->setOffset(idx);
+        //ROS_INFO_STREAM("Origin: " << origin.transpose() << " idx " << idx.transpose());
+        Eigen::Vector3i _OFF(_N_2, _N_2, _N_2);
+        edrb->setOffset(idx - _OFF);
 
         initialized = true;
     } else {
@@ -151,9 +155,10 @@ void depthImageCallback(const sensor_msgs::Image::ConstPtr& msg)
 
         offset = edrb->getVolumeCenter();
         diff = origin_idx - offset;
-
+        //ROS_INFO_STREAM("Origin: " << origin.transpose() << " idx " << origin_idx.transpose());
+        //ROS_INFO_STREAM("Origin: " << origin.transpose() << " offset: " << offset.transpose());
         while(diff.array().any()) {
-            //ROS_INFO("Moving Volume");
+            ROS_INFO("Moving Volume");
             edrb->moveVolume(diff);
 
             offset = edrb->getVolumeCenter();
@@ -172,9 +177,10 @@ void depthImageCallback(const sensor_msgs::Image::ConstPtr& msg)
 
     auto t4 = std::chrono::high_resolution_clock::now();
 
-    f_time << std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1).count() << " " <<
-              std::chrono::duration_cast<std::chrono::nanoseconds>(t3-t2).count() << " " <<
-              std::chrono::duration_cast<std::chrono::nanoseconds>(t4-t3).count() << std::endl;
+    f_time << std::chrono::duration_cast<std::chrono::microseconds>(t2-t1).count() << " " <<
+              std::chrono::duration_cast<std::chrono::microseconds>(t3-t2).count() << " " <<
+              std::chrono::duration_cast<std::chrono::microseconds>(t4-t3).count() << " " <<
+              cloud1.size() << std::endl;
 
     visualization_msgs::Marker m_occ, m_free;
     edrb->getMarkerOccupied(m_occ);
@@ -221,6 +227,8 @@ void sendCommandCallback(const ros::TimerEvent& e) {
 }
 
 int main(int argc, char** argv){
+    static const int A = 0;
+    ROS_INFO_STREAM("SIZE OF INT: " << sizeof(A));
     ros::init(argc, argv, "trajectory_replanning_example");
     ros::NodeHandle nh;
     ros::NodeHandle pnh("~");
@@ -263,7 +271,7 @@ int main(int argc, char** argv){
 
 
     double resolution;
-    pnh.param("resolution", resolution, 0.15);
+    pnh.param("resolution", resolution, 0.25);
     edrb.reset(new ewok::EuclideanDistanceRingBuffer<POW>(resolution, 1.0));
 
     double distance_threshold;
@@ -333,7 +341,7 @@ int main(int argc, char** argv){
     unsigned int i = 0;
 
     // Trying to unpause Gazebo for 10 seconds.
-    while (i <= 10 && !unpaused) {
+    while (i <= 1000 && !unpaused) {
         ROS_INFO("Wait for 1 second before trying to unpause Gazebo again.");
         std::this_thread::sleep_for(std::chrono::seconds(1));
         unpaused = ros::service::call("/gazebo/unpause_physics", srv);
